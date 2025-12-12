@@ -355,6 +355,62 @@ button {
   color: var(--text-secondary);
 }
 
+/* --------------------------------------------------------------------------
+   Search Box
+   -------------------------------------------------------------------------- */
+.search-box {
+  display: flex;
+  gap: 0.8rem;
+  margin-bottom: 2.4rem;
+}
+
+.search-input {
+  flex: 1;
+  padding: 1rem 1.4rem;
+  font-size: 1.4rem;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: 0.6rem;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.search-input:focus {
+  border-color: var(--button-primary);
+  box-shadow: 0 0 0 3px rgba(0, 119, 182, 0.15);
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 4.2rem;
+  height: 4.2rem;
+  background: var(--button-primary);
+  color: var(--button-text);
+  border: none;
+  border-radius: 0.6rem;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.search-btn:hover {
+  opacity: 0.9;
+}
+
+.search-highlight {
+  background: var(--highlight-bg);
+  color: var(--text-primary);
+  padding: 0.1em 0.2em;
+  border-radius: 0.2rem;
+}
+
 .thread-list {
   display: flex;
   flex-direction: column;

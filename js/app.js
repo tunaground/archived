@@ -56,7 +56,7 @@ const App = {
   registerRoutes() {
     // Board index (thread list)
     Router.register('/:boardId', async (params, query) => {
-      await this.handleBoardIndex(params.boardId, query.page);
+      await this.handleBoardIndex(params.boardId, query.page, query.q);
     });
 
     // Thread detail
@@ -70,17 +70,29 @@ const App = {
     });
   },
 
+  // 현재 보드의 전체 스레드 캐시
+  currentBoardId: null,
+  currentAllThreads: null,
+
   /**
    * Handle board index route
    */
-  async handleBoardIndex(boardId, pageParam) {
+  async handleBoardIndex(boardId, pageParam, queryParam) {
     Render.showLoading();
 
     try {
-      const threads = await API.fetchIndex(boardId);
+      let allThreads = await API.fetchIndex(boardId);
 
       // Sort by updatedAt descending (most recent first)
-      threads.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      allThreads.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+      // 캐시 저장
+      this.currentBoardId = boardId;
+      this.currentAllThreads = allThreads;
+
+      // Search filtering
+      const query = queryParam ? decodeURIComponent(queryParam).trim() : '';
+      let threads = query ? this.filterThreads(allThreads, query) : allThreads;
 
       // Pagination
       const page = parseInt(pageParam, 10) || 1;
@@ -88,10 +100,50 @@ const App = {
       const startIndex = (page - 1) * CONFIG.threadsPerPage;
       const pageThreads = threads.slice(startIndex, startIndex + CONFIG.threadsPerPage);
 
-      Render.renderThreadList(boardId, pageThreads, page, totalPages);
+      Render.renderThreadList(boardId, pageThreads, page, totalPages, query, allThreads);
     } catch (error) {
       Render.showError(`Failed to load threads: ${error.message}`);
     }
+  },
+
+  /**
+   * Render filtered threads (called from live search)
+   */
+  renderFilteredThreads(boardId, allThreads, query) {
+    let threads = query ? this.filterThreads(allThreads, query) : allThreads;
+
+    // Pagination (always page 1 for live search)
+    const page = 1;
+    const totalPages = Math.ceil(threads.length / CONFIG.threadsPerPage);
+    const pageThreads = threads.slice(0, CONFIG.threadsPerPage);
+
+    // 결과 영역만 업데이트
+    const resultsContainer = document.getElementById('thread-results');
+    if (resultsContainer) {
+      resultsContainer.innerHTML = Render.renderThreadResults(boardId, pageThreads, page, totalPages, query);
+    }
+  },
+
+  /**
+   * Filter threads by search query
+   */
+  filterThreads(threads, query) {
+    const lowerQuery = query.toLowerCase();
+    return threads.filter(thread => {
+      // Search in title
+      if (thread.title && thread.title.toLowerCase().includes(lowerQuery)) {
+        return true;
+      }
+      // Search in username
+      if (thread.username && thread.username.toLowerCase().includes(lowerQuery)) {
+        return true;
+      }
+      // Search in threadId
+      if (thread.threadId && String(thread.threadId).includes(query)) {
+        return true;
+      }
+      return false;
+    });
   },
 
   /**

@@ -194,9 +194,31 @@ const Render = {
   },
 
   /**
+   * Render search box
+   */
+  renderSearchBox(boardId, query = '') {
+    return `
+      <div class="search-box">
+        <input type="text"
+               id="search-input"
+               class="search-input"
+               placeholder="검색어 입력..."
+               value="${this.escapeHtml(query)}"
+               autocomplete="off">
+        <button type="button" id="search-btn" class="search-btn" aria-label="Search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </button>
+      </div>
+    `;
+  },
+
+  /**
    * Render thread list (index page)
    */
-  renderThreadList(boardId, threads, page, totalPages) {
+  renderThreadList(boardId, threads, page, totalPages, query = '', allThreads = null) {
     const board = CONFIG.boards.find(b => b.id === boardId);
     const boardName = board ? board.name : boardId;
 
@@ -209,34 +231,100 @@ const Render = {
         <p class="page-description">Archived threads from ${this.escapeHtml(boardName)} board</p>
       </div>
 
-      ${threads.length === 0 ? `
-        <div class="empty">No threads found.</div>
-      ` : `
-        <div class="thread-list">
-          ${threads.map(thread => this.renderThreadCard(boardId, thread)).join('')}
-        </div>
-        ${this.renderPagination(boardId, page, totalPages)}
-      `}
+      ${this.renderSearchBox(boardId, query)}
+
+      <div id="thread-results">
+        ${this.renderThreadResults(boardId, threads, page, totalPages, query)}
+      </div>
     `;
 
     this.getContainer().innerHTML = html;
+
+    // Setup search event listeners (allThreads for live filtering)
+    this.setupSearchListeners(boardId, allThreads || threads);
+  },
+
+  /**
+   * Render thread results (list + pagination)
+   */
+  renderThreadResults(boardId, threads, page, totalPages, query = '') {
+    if (threads.length === 0) {
+      return `<div class="empty">${query ? '검색 결과가 없습니다.' : 'No threads found.'}</div>`;
+    }
+    return `
+      <div class="thread-list">
+        ${threads.map(thread => this.renderThreadCard(boardId, thread, query)).join('')}
+      </div>
+      ${this.renderPagination(boardId, page, totalPages, query)}
+    `;
+  },
+
+  /**
+   * Setup search event listeners
+   */
+  setupSearchListeners(boardId, allThreads) {
+    const input = document.getElementById('search-input');
+    const btn = document.getElementById('search-btn');
+
+    if (!input || !btn) return;
+
+    let debounceTimer = null;
+
+    const updateUrl = (query) => {
+      const newHash = query
+        ? `#/${boardId}?q=${encodeURIComponent(query)}`
+        : `#/${boardId}`;
+      // URL만 변경하고 hashchange 이벤트 발생시키지 않음
+      history.replaceState(null, '', newHash);
+    };
+
+    const doSearch = () => {
+      const query = input.value.trim();
+      updateUrl(query);
+      App.renderFilteredThreads(boardId, allThreads, query);
+    };
+
+    // 실시간 검색 (debounce 150ms)
+    input.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(doSearch, 150);
+    });
+
+    btn.addEventListener('click', doSearch);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        clearTimeout(debounceTimer);
+        doSearch();
+      }
+    });
+  },
+
+  /**
+   * Highlight search query in text
+   */
+  highlightQuery(text, query) {
+    if (!query) return this.escapeHtml(text);
+    const escaped = this.escapeHtml(text);
+    const queryEscaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${queryEscaped})`, 'gi');
+    return escaped.replace(regex, '<mark class="search-highlight">$1</mark>');
   },
 
   /**
    * Render a single thread card
    */
-  renderThreadCard(boardId, thread) {
+  renderThreadCard(boardId, thread, query = '') {
     return `
       <article class="thread-card">
         <h2 class="thread-card-title">
           <span class="thread-id">#${thread.threadId}</span>
           <a href="#/${boardId}/${thread.threadId}">
-            ${this.escapeHtml(thread.title)}
+            ${this.highlightQuery(thread.title, query)}
           </a>
           <span class="thread-size">(${thread.size})</span>
         </h2>
         <div class="thread-card-meta">
-          <span>${this.escapeHtml(thread.username)}</span>
+          <span>${this.highlightQuery(thread.username, query)}</span>
         </div>
         <div class="thread-card-meta">
           <span>${this.formatDate(thread.createdAt)} - ${this.formatDate(thread.updatedAt)}</span>
@@ -248,7 +336,7 @@ const Render = {
   /**
    * Render pagination
    */
-  renderPagination(boardId, currentPage, totalPages) {
+  renderPagination(boardId, currentPage, totalPages, query = '') {
     if (totalPages <= 1) return '';
 
     const pages = [];
@@ -288,6 +376,9 @@ const Render = {
       pages.push(totalPages);
     }
 
+    // Build query string for pagination links
+    const queryParams = query ? `&q=${encodeURIComponent(query)}` : '';
+
     return `
       <nav class="pagination" aria-label="Pagination">
         ${pages.map(p => {
@@ -297,7 +388,7 @@ const Render = {
           if (p === currentPage) {
             return `<span class="pagination-current">${p}</span>`;
           }
-          return `<a href="#/${boardId}?page=${p}" class="pagination-link">${p}</a>`;
+          return `<a href="#/${boardId}?page=${p}${queryParams}" class="pagination-link">${p}</a>`;
         }).join('')}
       </nav>
     `;
